@@ -41,6 +41,24 @@ fn placement(target: &str, guess: &str) -> PlacementInfo {
     ret
 }
 
+/// consistent checks if a word is consistent with a guess and its response.
+fn consistent(word: &str, guess: &str, info: PlacementInfo) -> bool {
+    word.chars()
+        .zip(guess.chars())
+        .take(WORD_LENGTH)
+        .enumerate()
+        .all(|(i, (wi, gi))| match info.placements[i] {
+            // If the guess has placed a character correctly, then
+            // we know what that character should be in the target
+            Placement::Correct => wi == gi,
+            // If the guess has a misplaced character, we know what the slot
+            // should not contain
+            Placement::Misplaced => wi != gi,
+            // The character should be absent from the target as well
+            Placement::Absent => !word.contains(gi),
+        })
+}
+
 fn main() {
     println!("Hello, world!");
 }
