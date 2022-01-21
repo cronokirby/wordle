@@ -1,3 +1,9 @@
+extern crate rand;
+use std::io;
+use std::io::BufRead;
+
+use rand::{thread_rng, Rng};
+
 /// This represents the information we receive for each character in a guess.
 ///
 /// This information is what we use to then produce our next guess.
@@ -26,7 +32,7 @@ fn placement(target: &str, guess: &str) -> PlacementInfo {
     let mut ret = PlacementInfo {
         placements: [Placement::Absent; WORD_LENGTH],
     };
-    for (i, (ti, gi)) in guess
+    for (i, (gi, ti)) in guess
         .chars()
         .zip(target.chars())
         .enumerate()
@@ -59,6 +65,40 @@ fn consistent(word: &str, guess: &str, info: PlacementInfo) -> bool {
         })
 }
 
-fn main() {
-    println!("Hello, world!");
+fn read_wordle_answers() -> Vec<String> {
+    let file = include_str!("../data/wordle-answers.txt");
+    file.lines().map(|x| x.to_owned()).collect()
+}
+
+fn print_placement(guess: &str, placement: &PlacementInfo) {
+    for (i, char) in guess.chars().enumerate() {
+        print!("\u{001b}[1m");
+        match placement.placements[i] {
+            Placement::Correct => print!("\u{001b}[42m{char}\u{001b}[0m"),
+            Placement::Misplaced => print!("\u{001b}[43m{char}\u{001b}[0m"),
+            Placement::Absent => print!("\u{001b}[40m{char}\u{001b}[0m"),
+        }
+    }
+    println!();
+}
+
+fn play_interactive_wordle() -> io::Result<()> {
+    println!("Guess a 5 letter word:");
+    let words = read_wordle_answers();
+    let mut rng = thread_rng();
+    let target: &str = &words[rng.gen_range(0..words.len())];
+    for maybe_guess in io::stdin().lock().lines() {
+        let guess = maybe_guess?;
+        let placement = placement(target, &guess);
+        print_placement(&guess, &placement);
+        if guess == target {
+            println!("\ncongratulations!");
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn main() -> io::Result<()> {
+    play_interactive_wordle()
 }
