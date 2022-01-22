@@ -1,6 +1,6 @@
 extern crate rand;
-use std::io;
 use std::io::BufRead;
+use std::{collections::HashMap, io};
 
 use rand::{thread_rng, Rng};
 
@@ -47,6 +47,51 @@ fn placement(target: &str, guess: &str) -> PlacementInfo {
     ret
 }
 
+#[derive(Debug, Clone)]
+struct Solver {
+    sorted: Vec<String>,
+}
+
+impl Solver {
+    fn make(words: &[String], frequencies: &HashMap<String, u64>) -> Self {
+        let mut sorted = Vec::with_capacity(words.len());
+        for word in words {
+            sorted.push(word.clone());
+        }
+        sorted.sort_by_key(|x| frequencies.get(x).unwrap_or(&0));
+        Solver { sorted }
+    }
+
+    fn update(&mut self, guess: &str, info: PlacementInfo) {
+        let mut new_sorted = self
+            .sorted
+            .iter()
+            .filter(|x| consistent(x, guess, info))
+            .map(|x| x.clone())
+            .collect();
+        std::mem::swap(&mut self.sorted, &mut new_sorted)
+    }
+
+    fn next_guess(&self) -> &str {
+        &self.sorted[0]
+    }
+}
+
+fn guess_count(mut solver: Solver, target: &str) -> u64 {
+    let mut guess = solver.next_guess().to_owned();
+    let mut count = 1;
+    while guess != target {
+        let info = placement(target, &guess);
+        solver.update(&guess, info);
+        guess = solver.next_guess().to_owned();
+        count += 1;
+        if count > 100 {
+            return 100;
+        }
+    }
+    count
+}
+
 /// consistent checks if a word is consistent with a guess and its response.
 fn consistent(word: &str, guess: &str, info: PlacementInfo) -> bool {
     word.chars()
@@ -68,6 +113,18 @@ fn consistent(word: &str, guess: &str, info: PlacementInfo) -> bool {
 fn read_wordle_answers() -> Vec<String> {
     let file = include_str!("../data/wordle-answers.txt");
     file.lines().map(|x| x.to_owned()).collect()
+}
+
+fn read_frequencies() -> HashMap<String, u64> {
+    let file = include_str!("../data/frequencies.csv");
+    let mut out = HashMap::new();
+    for line in file.lines() {
+        let mut split = line.split(',');
+        let word = split.next().unwrap();
+        let count = u64::from_str_radix(split.next().unwrap(), 10).unwrap();
+        out.insert(word.to_owned(), count);
+    }
+    out
 }
 
 fn print_placement(guess: &str, placement: &PlacementInfo) {
@@ -100,5 +157,11 @@ fn play_interactive_wordle() -> io::Result<()> {
 }
 
 fn main() -> io::Result<()> {
-    play_interactive_wordle()
+    let answers = read_wordle_answers();
+    let frequencies = read_frequencies();
+    let solver = Solver::make(&answers, &frequencies);
+    let sum: u64 = answers.iter().map(|x| guess_count(solver.clone(), x)).sum();
+    let average = (sum as f64) / (answers.len() as f64);
+    println!("{}", average);
+    Ok(())
 }
