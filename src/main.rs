@@ -1,5 +1,6 @@
 extern crate rand;
 use std::io::BufRead;
+use std::ops::Add;
 use std::{collections::HashMap, io};
 
 use rand::{thread_rng, Rng};
@@ -50,16 +51,20 @@ fn placement(target: &str, guess: &str) -> PlacementInfo {
 #[derive(Debug, Clone)]
 struct Solver {
     sorted: Vec<String>,
+    frequencies: HashMap<String, u64>,
 }
 
 impl Solver {
-    fn make(words: &[String], frequencies: &HashMap<String, u64>) -> Self {
+    fn make(words: &[String], frequencies: HashMap<String, u64>) -> Self {
         let mut sorted = Vec::with_capacity(words.len());
         for word in words {
             sorted.push(word.clone());
         }
         sorted.sort_by_key(|x| frequencies.get(x).unwrap_or(&0));
-        Solver { sorted }
+        Solver {
+            sorted,
+            frequencies,
+        }
     }
 
     fn update(&mut self, guess: &str, info: PlacementInfo) {
@@ -72,6 +77,20 @@ impl Solver {
         std::mem::swap(&mut self.sorted, &mut new_sorted)
     }
 
+    fn update_advanced(&mut self, guess: &str, info: PlacementInfo) {
+        self.update(guess, info);
+        let size = self.sorted.len() as u64;
+        dbg!(size);
+        let (i, _) = self.sorted.iter().enumerate().max_by_key(|(_, guess)| {
+            self.sorted.iter().map(|target| {
+                let info = placement(target, guess);
+                let frequency = self.frequencies.get(target).unwrap();
+                frequency * (size - (self.sorted.iter().map(|x| consistent(x, guess, info)).count() as u64))
+            }).sum::<u64>()
+        }).unwrap();
+        self.sorted.swap(i, 0);
+    }
+
     fn next_guess(&self) -> &str {
         &self.sorted[0]
     }
@@ -82,7 +101,7 @@ fn guess_count(mut solver: Solver, target: &str) -> u64 {
     let mut count = 1;
     while guess != target {
         let info = placement(target, &guess);
-        solver.update(&guess, info);
+        solver.update_advanced(&guess, info);
         guess = solver.next_guess().to_owned();
         count += 1;
         if count > 100 {
@@ -159,7 +178,7 @@ fn play_interactive_wordle() -> io::Result<()> {
 fn main() -> io::Result<()> {
     let answers = read_wordle_answers();
     let frequencies = read_frequencies();
-    let solver = Solver::make(&answers, &frequencies);
+    let solver = Solver::make(&answers, frequencies);
     let sum: u64 = answers.iter().map(|x| guess_count(solver.clone(), x)).sum();
     let average = (sum as f64) / (answers.len() as f64);
     println!("{}", average);
