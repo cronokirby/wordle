@@ -1,6 +1,5 @@
 extern crate rand;
 use std::io::BufRead;
-use std::ops::Add;
 use std::{collections::HashMap, io};
 
 use rand::{thread_rng, Rng};
@@ -18,6 +17,19 @@ enum Placement {
     Absent,
 }
 
+impl TryFrom<char> for Placement {
+    type Error = ();
+
+    fn try_from(value: char) -> Result<Self, Self::Error> {
+        match value.to_ascii_lowercase() {
+            'g' => Ok(Placement::Correct),
+            'y' => Ok(Placement::Misplaced),
+            'b' => Ok(Placement::Absent),
+            _ => Err(()),
+        }
+    }
+}
+
 /// WORD_LENGTH is the number of characters in each word.
 const WORD_LENGTH: usize = 5;
 
@@ -27,6 +39,21 @@ const WORD_LENGTH: usize = 5;
 #[derive(Clone, Copy, Debug)]
 struct PlacementInfo {
     placements: [Placement; WORD_LENGTH],
+}
+
+impl<'a> TryFrom<&'a str> for PlacementInfo {
+    type Error = ();
+
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        if value.len() != WORD_LENGTH {
+            return Err(());
+        }
+        let mut placements = [Placement::Absent; WORD_LENGTH];
+        for (i, c) in value.chars().enumerate() {
+            placements[i] = Placement::try_from(c)?;
+        }
+        Ok(PlacementInfo { placements })
+    }
 }
 
 fn placement(target: &str, guess: &str) -> PlacementInfo {
@@ -51,19 +78,18 @@ fn placement(target: &str, guess: &str) -> PlacementInfo {
 #[derive(Debug, Clone)]
 struct Solver {
     sorted: Vec<String>,
-    frequencies: HashMap<String, u64>,
 }
 
 impl Solver {
-    fn make(words: &[String], frequencies: HashMap<String, u64>) -> Self {
+    fn make(words: &[String], frequencies: &HashMap<String, u64>) -> Self {
         let mut sorted = Vec::with_capacity(words.len());
         for word in words {
             sorted.push(word.clone());
         }
         sorted.sort_by_key(|x| frequencies.get(x).unwrap_or(&0));
+        sorted.reverse();
         Solver {
             sorted,
-            frequencies,
         }
     }
 
@@ -77,38 +103,9 @@ impl Solver {
         std::mem::swap(&mut self.sorted, &mut new_sorted)
     }
 
-    fn update_advanced(&mut self, guess: &str, info: PlacementInfo) {
-        self.update(guess, info);
-        let size = self.sorted.len() as u64;
-        dbg!(size);
-        let (i, _) = self.sorted.iter().enumerate().max_by_key(|(_, guess)| {
-            self.sorted.iter().map(|target| {
-                let info = placement(target, guess);
-                let frequency = self.frequencies.get(target).unwrap();
-                frequency * (size - (self.sorted.iter().map(|x| consistent(x, guess, info)).count() as u64))
-            }).sum::<u64>()
-        }).unwrap();
-        self.sorted.swap(i, 0);
-    }
-
     fn next_guess(&self) -> &str {
         &self.sorted[0]
     }
-}
-
-fn guess_count(mut solver: Solver, target: &str) -> u64 {
-    let mut guess = solver.next_guess().to_owned();
-    let mut count = 1;
-    while guess != target {
-        let info = placement(target, &guess);
-        solver.update_advanced(&guess, info);
-        guess = solver.next_guess().to_owned();
-        count += 1;
-        if count > 100 {
-            return 100;
-        }
-    }
-    count
 }
 
 /// consistent checks if a word is consistent with a guess and its response.
@@ -175,12 +172,25 @@ fn play_interactive_wordle() -> io::Result<()> {
     Ok(())
 }
 
-fn main() -> io::Result<()> {
+fn guess_wordle() -> io::Result<()> {
     let answers = read_wordle_answers();
     let frequencies = read_frequencies();
-    let solver = Solver::make(&answers, frequencies);
-    let sum: u64 = answers.iter().map(|x| guess_count(solver.clone(), x)).sum();
-    let average = (sum as f64) / (answers.len() as f64);
-    println!("{}", average);
+    let mut solver = Solver::make(&answers, &frequencies);
+    let mut guess = solver.next_guess().to_owned();
+    println!("guess: {}", &guess);
+    for maybe_line in io::stdin().lock().lines() {
+        let line = maybe_line?;
+        let info = match PlacementInfo::try_from(line.as_str()) {
+            Ok(info) => info,
+            Err(_) => continue
+        };
+        solver.update(&guess, info);
+        guess = solver.next_guess().to_owned();
+        println!("guess: {}", guess);
+    }
     Ok(())
+}
+
+fn main() -> io::Result<()> {
+    guess_wordle()
 }
