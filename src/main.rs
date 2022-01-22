@@ -88,9 +88,7 @@ impl Solver {
         }
         sorted.sort_by_key(|x| frequencies.get(x).unwrap_or(&0));
         sorted.reverse();
-        Solver {
-            sorted,
-        }
+        Solver { sorted }
     }
 
     fn update(&mut self, guess: &str, info: PlacementInfo) {
@@ -182,7 +180,7 @@ fn guess_wordle() -> io::Result<()> {
         let line = maybe_line?;
         let info = match PlacementInfo::try_from(line.as_str()) {
             Ok(info) => info,
-            Err(_) => continue
+            Err(_) => continue,
         };
         solver.update(&guess, info);
         guess = solver.next_guess().to_owned();
@@ -192,5 +190,11 @@ fn guess_wordle() -> io::Result<()> {
 }
 
 fn main() -> io::Result<()> {
-    guess_wordle()
+    let args: Vec<String> = std::env::args().collect();
+    match args.get(1).map(|x| x.as_str()) {
+        Some("play") => play_interactive_wordle()?,
+        Some("guess") => guess_wordle()?,
+        _ => println!("unknown command"),
+    }
+    Ok(())
 }
